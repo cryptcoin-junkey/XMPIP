@@ -1,0 +1,48 @@
+@startuml
+title PartyScript Lifecycle (Engine)
+
+skinparam state {
+  BackgroundColor<<Object>> Olive
+}
+
+[*] --> Engine
+state Engine <<Object>> {
+  state Environment <<Object>> {
+  }
+  Environment --> CheckingLoopCall : execute
+  Environment --> CheckingResult : finish
+
+  [*] --> BuildingEnvStack
+  BuildingEnvStack --> GeneratingEnvironment
+  
+  GeneratingEnvironment : Spawns Environment and pushes it to EnvStack.
+  GeneratingEnvironment --> Environment : start
+
+  CheckingLoopCall : should not be detected loop.
+  CheckingLoopCall --> GeneratingEnvironment
+  CheckingLoopCall --> PoppingAllEnvStack
+
+  CheckingEnvStack : checks if EnvStack is empty
+  CheckingEnvStack --> FinalizingEngine
+  CheckingEnvStack --> FinalizingEnvironment
+
+  CheckingResult : Checks result of the finished environment.
+  CheckingResult --> PoppingAllEnvStack
+  CheckingResult --> CheckingEnvStack
+
+  FinalizingEnvironment : pops from data stack on the finished env\n and pushes them to the resumed env. 
+  FinalizingEnvironment --> Environment : resume
+  PoppingAllEnvStack : Probably this execution was failed.
+  PoppingAllEnvStack --> FinalizingEngine
+
+  state FinalizingEngine {
+    [*] --> CommittingKeyValue
+    [*] --> RollbackingKeyValue
+    CommittingKeyValue --> [*]
+    RollbackingKeyValue --> [*]
+  }
+  FinalizingEngine --> [*]
+}
+Engine --> [*]
+
+@enduml
