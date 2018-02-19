@@ -89,6 +89,7 @@ PartyScript が管理するオブジェクトならびにそれらのデータ�
 * Key-Value ストア
   * Bitcoin Script の任意のデータ型を Key および Value を保持している。
 
+![データ構造](XMPIP-0002/classes.svg)
 # Engine
 
 ## 定義
