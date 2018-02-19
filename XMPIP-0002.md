@@ -57,6 +57,11 @@ PartyScript のプログラム片(Scriptlet と呼ぶ)は、Counterparty に対�
 
 Scriptlet の開発者は、この性質を利用して、スクリプト起動メッセージに対する柔軟なアクセス制御を実装できる。
 
+## 基軸アセットの燃料化
+
+PartyScript の実行に際しては、その環境利用料(燃料)として基軸アセット(Counterparty なら XCP で Monaparty なら XMP)が消費される。
+消費される基軸アセットのアドレスは、Counterparty に対して、スクリプト起動依頼メッセージを発行したアドレスとなる。
+
 # Counterparty asset への拡張
 
 PartyScript は、既存の Counterparty asset に対して、下記のデータ構造を追加する。
@@ -73,12 +78,14 @@ PartyScript が管理するオブジェクトならびにそれらのデータ�
 
 * Asset
  * いわゆる "カウンターパーティ・トークン" と呼ばれるものと等価である。
-* Scriptlet
+* Scriplet
  * 実行エンジンが処理するオペレータおよびデータを含むバイト列で、Asset が保持している。
 * Engine
  * Environment を保持する環境スタックと、commit/rollback 前の key-value ストアの値を保持している。
 * Environment
  * アセットが保持している Scriptlet を保持する実行スタックと、Scriptlet に含まれるオペレータの操作対象であるデータスタックを保持している。
+* Parser
+ * Environment が保持している実行スタックを解釈し、データスタックや Key-Value ストアを更新する。
 * Key-Value ストア
  * Bitcoin Script の任意のデータ型を Key および Value を保持している。
 
@@ -86,35 +93,91 @@ PartyScript が管理するオブジェクトならびにそれらのデータ�
 
 ## 定義
 
+Engine は、Scriptlet の実行環境と Key-Value ストアに含まれるデータの一貫性を管理する、オブジェクトである。
+Engine は、永続性を持たないオブジェクトである。
+Engine は、それぞれの Counterparty ノードにおいて、0または1個のオブジェクトとして存在する。
+
 ## ライフサイクル
 
 Engine  のライフサイクルは、下記のとおりである。
 
 0. イベントを受信する。
 0. コールスタックを構築する。
-0. Scriptlet にイベントに含まれるデータを引き渡し、生成された Scriptlet の環境をコールスタックに積む
-0. コールスタックの最上部にある Scriptlet から他アセットにバインドされた Scriptlet の実行依頼があったとき、下記の処理を行う。
- 0. 新規に作成予定の Scriptlet を用いた環境がコールスタックに存在する場合、循環呼び出し違反のフラグを立て即時にすべてのコールスタックを pop する。
- 0. 実行依頼のあったメッセージとともに 3 に戻る。
-0. コールスタックの最上部にある Script が終了した場合、下記の処理を行う。
- 0. なんらかの実行違反フラグが立っていた場合、即時にコールスタックにある全てを pop する。
- 0. 終了した環境に実行違反フラグが立っていない場合、その環境をコールスタックから pop し、結果をコールスタックの top にある環境のデータスタックに push する。
+0. イベントに含まれるデータを元に Environment の生成を行い、生成された Environment をコールスタックに積む
+0. コールスタックの最上部にある Environment が管理する Parser から、他アセットにバインドされた Scriptlet の実行依頼があったとき、下記の処理を行う。
+ 0. 新規に作成予定の Scriptlet を用いた環境がコールスタックに存在する場合かをチェックしその真偽で下記の処理を行う。
+  * 真だったならば、即時にすべてのコールスタックを pop する。
+  * 義だったならば、実行依頼のあったメッセージとともに 3 に戻る。
+0. コールスタックの top にある Environment が保持する Scriptlet が終了した場合、その受理フラグの状態により下記の処理を行う。
+ 0. 受理フラグが立っていなかった場合、即時にコールスタックにある全てを pop する。
+ 0. 受理フラグが立っていた場合、その Environment のデータスタックを確保した上でコールスタックから pop し、確保したデータを新しくコールスタックの top になる Environment のデータスタックに push する。
 0. コールスタックが空になった場合には、実行に要した XMP を環境利用料として徴収し、また今回のライフサイクルで発生した Key-Value ストレージへについて下記の処理を行った上で終了する。
- 0. 未受理フラグが立っていた場合、変更を rollback する。
- 0. 未受理フラグが立っていない場合、変更を commit する。
+ 0. 受理フラグが立っていた場合、変更を commit する。
+ 0. 受理フラグが立っていない場合、変更を rollback する。
 
 ここで、実行違反が発生していた場合でも、環境利用料として XMP が徴収されることに注意が必要である。
 
+## Engine 起動メッセージ
 
-# Scriptlet
+Engine の起動契機をブロックチェーンに記録するため、Counterparty API に send_execute メソッドが追加される。
+
+## コールスタックの段数上限
+
+コールスタックの段数上限に関しては未検討である。(指数関数的に燃料として必要な XMP を増やすか、単に上限を設定するか)
+
+# Environment
 
 ## 定義
 
-PartyScript の実行環境を制御するためのデータとオペレータを並べたものである。プログラミング言語の一種と捉えられる。
+プログラムの静的表現である Scriptlet の実行に必要な環境を表すオブジェクトである。
+Environment と Parser は 1-1 の関係にある。
+一つの Engine に対して、複数の Environment が存在しうるが、それらが並行に実行されることはない。
+Environment は揮発性のオブジェクトであり、Parser の実行が終了し finalize が行われたあとは消滅する。
+
+## ライフサイクル
+
+0. Parser が用いるデータスタックと実行スタックを構築する。
+0. アセットが保持している Scriptlet をデシリアライズし、実行スタック上にコピーする。
+0. イベント発火の契機となるメッセージに含まれるデータを、データスタック上にコピーする。
+0. Parser から完了メッセージが来るまで待機する。
+0. Parser の状態(受理/未受理)およびデータスタックの内容を Engine に引き渡す。
+
+Engine により Environment が破棄される際に、保持している Parser を破棄する。
+
+
+# Parser
+
+## 定義
+
+Parser は、実行スタックを解釈する。また解釈したオペレータを経由して、データスタックや Key-Value ストアの更新を行う。
+言語処理系の一種と捉えられる。
+
+## ライフサイクル
+
+Parser は、 Environment により生成され、下記の通りのライフサイクルとなる。
+
+0. 実行スタックからオペレータを pop する。
+0. オペレータの処理により下記のいずれかが発生する
+ * データスタックの状態が変わる。
+ * Key-Value ストアの状態が変わる。
+ * 別の scriptlet の実行依頼イベントを Engine へ送信する。
+ * 受理状態へ移行する。
+ * データスタックに 0 を push し、実行スタックの内容を全て pop する。(エラー発生)
+0. 実行スタックが空でなければ 1 へ戻る
+0. データスタックの top  が0 でなければ受理状態とする。
+0. 自らを管理する Environment へ、完了のメッセージを送信する。
+
+完了メッセージを受信した Environment は、完了メッセージを送信した Scriptlet を破棄する。
+
+# Scrptlet
+
+## 定義
+
+Scriptlet は、PartyScript の処理記述、またそのシリアライズされたバイナリ表記である。
 
 ## 言語仕様
 
-PartyScript の文法、オペレータの作用、ならびにオペコードは、限られた例外を除き Bitcoin Script に準拠する。
+Scriptlet の文法、オペレータの作用、ならびにオペコードは、限られた例外を除き Bitcoin Script に準拠する。
 
 ### 例外事項
 
@@ -133,36 +196,30 @@ OP_PARTYSCRIPT: n => {result of sub-operator}
 全ての PartyScript オペレータは、1バイトの数値と OP_PARTY_SCRIPT の連続により表現される。
 本仕様では、可読性のため、PartyScript のオペレータのマクロ表記として EOP_ プレフィクスで表す。
 
-### send_execute メッセージの直接呼び出し
+### execute メッセージの直接呼び出し
 
-PartyScript には、OP_SEND_EXECUTE オペレータが定義され、下記のように作用する。
+PartyScript には、EOP_SEND_EXECUTE オペレータが定義され、下記のように作用する。
 
 ```
 EOP_SEND_EXECUTE : obj1:any obj2:any ... objn:any n:int asset_name:string => {{result of scriptlet on `asset_name`}}
 ```
 
-OP_SEND_EXECUTE オペレータは、Engine に対し、Counterparty が send_execute メッセージを受信したときと同じように作用する。
-結果として、指定した `asset_name` に相当する scriptlet の実行が開始され、メッセージ送信元の scriptlet の実行は遅延される。
+EOP_SEND_EXECUTE オペレータは、Engine に対し、Counterparty が send_execute メッセージを受信したときと同じように作用する。
+結果として、指定した `asset_name` に相当する scriptlet の実行が開始され、メッセージ送信元の Parser の実行は遅延される。
 
 また、Engine は、スタック最上位にある scriptlet の実行が終了した時、未受理のフラグが立っていなければ、データスタックの内容を新たにスタック最上位になる Environment のデータスタックに push する。
 
-OP_SEND_EXECUTE オペレータは、他言語におけるサブルーチンや関数と呼ばれるものと同等の機能を実現するために利用されうる。
+EOP_SEND_EXECUTE オペレータは、他言語におけるサブルーチンや関数と呼ばれるものと同等の機能を実現するために利用されうる。
 
-## ライフサイクル
+# デプロイ
 
-環境は外部からのイベントにより構築され、下記の通りのライフサイクルとなる。
+Scriptlet で実行するスクリプトは、 Asset に紐付けられたストレージからロードされる。
+そのため、Scriptlet は、実行前にストレージへ登録し Asset に束縛されなければならない。この作業をデプロイと呼ぶ。
 
-0. データスタックと実行スタックが構築される。
-0. アセットが保持している実行コードが実行スタック上にコピーされる。
-0. イベント発火の契機となるメッセージに含まれるデータがデータスタック上にコピーされる。
-0. インタプリタが実行スタックの内容を処理し、以下の状態変化が起こる
- * 実行スタックから命令を pop する。
- * データスタックの状態が変わる。
- * キーバリューストレージの状態が変わる。
- * 別の scriptlet を実行するイベントを送信する。
-0. 終了状態へ遷移する。
+## デプロイ・メッセージ
 
-終了状態への遷移でインタプリタが終了した時点で、データスタックと実行スタックは破棄される。
+デプロイを行うためのメッセージ作成を目的として Counterparty API に send_deploy メソッドが追加される。
+
 
 # アクセス制御
 
@@ -183,17 +240,16 @@ EOP_ROOT_OWNER : empty => {Address}
 EOP_ASSET_OWNER: empty => {Address}
 ```
 
-`EOP_ROOT_OWNER` は、コントラクト開始イベントの発火契機となったトークンの所有権を有するアドレスをデータスタックに push する。
-`EOP_ASSET_OWNER` は、現在実行中の scriptlet に紐付いているトークンの所有権を有するアドレスをデータスタックに push する。
+`EOP_ROOT_OWNER` は、コントラクト開始イベントの発火契機となった Assetの所有権を有するアドレスをデータスタックに push する。
+`EOP_ASSET_OWNER` は、現在実行中の scriptlet に紐付いている Asset の所有権を有するアドレスをデータスタックに push する。
 
-たとえば、`EOP_ROOT_OWNER` と `EOP_TOKEN_OWNER` とを用いて、特定のアドレス以外が所有しているトークンからの scriptlet 実行を拒否させるには、
-下記のようにすればよい。
+たとえば、`EOP_ROOT_OWNER` と `EOP_TOKEN_OWNER` とを用いて、Scriptlet を束縛している Asset の所有者以外のアドレスからの scriptlet 実行を拒否させるには、下記のようにすればよい。
 
 ```
-EOP_ROOT_OWNER EOP_TOKEN_OWNER OP_EQUAL OP_VERIF  {{処理本体}}
+EOP_ROOT_OWNER EOP_TOKEN_OWNER OP_EQUAL OP_VERNOTIF  {{処理本体}}
 ```
 
-## コールツリーにあるアセット名を取得
+## コールツリーにあるアセット名の取得
 
 ```
 EOP_ASSET_NAME: {number} => {String}
@@ -211,20 +267,8 @@ EOP_ASSET_BASENAME: {string} => {string}
 
 0 EOP_ASSET_NAME EOP_ASSET_BASENAME 1 EOP_ASSET_NAME EOP_ASSET_BASENAME OP_EQUAL OP_VERNOTIF {{処理の本体}}
 
-このように保護されたサブアセットらに束縛された scriptlet 群は、共通のベースアセット名を持つオブジェクトの private メソッドと見立てて活用できる。
+このように保護されたサブアセットらに束縛された Scriptlet 群は、共通のベースアセット名を持つオブジェクトの private メソッドと見立てて活用できる。
 
-
-# デプロイ
-
-Scriptlet で実行するスクリプトは、アセットに紐付けられたストレージからロードされる。そのため、Scriptlet は、実行前にストレージへ登録しアセットに束縛されなければならない。この作業をデプロイと呼ぶ。
-
-## デプロイ・メッセージ
-
-デプロイを行うためのメッセージ作成を目的として Counterparty API に send_deploy メソッドが追加される。
-
-# Engine 起動メッセージ
-
-Engine の起動契機をブロックチェーンに記録するため、Counterparty API に send_script メソッドが追加される。
 
 # Key-Value ストレージ
 
