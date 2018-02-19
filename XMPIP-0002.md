@@ -84,7 +84,7 @@ PartyScript が管理するオブジェクトならびにそれらのデータ�
   * Environment を保持する環境スタックと、commit/rollback 前の key-value ストアの値を保持している。
 * Environment
   * アセットが保持している Scriptlet を保持する実行スタックと、Scriptlet に含まれるオペレータの操作対象であるデータスタックを保持している。
-* Parser
+* Scanner
   * Environment が保持している実行スタックを解釈し、データスタックや Key-Value ストアを更新する。
 * Key-Value ストア
   * Bitcoin Script の任意のデータ型を Key および Value を保持している。
@@ -104,7 +104,7 @@ Engine  のライフサイクルは、下記のとおりである。
 0. イベントを受信する。
 0. コールスタックを構築する。
 0. イベントに含まれるデータを元に Environment の生成を行い、生成された Environment をコールスタックに積む
-0. コールスタックの最上部にある Environment が管理する Parser から、他アセットにバインドされた Scriptlet の実行依頼があったとき、下記の処理を行う。
+0. コールスタックの最上部にある Environment が管理する Scanner から、他アセットにバインドされた Scriptlet の実行依頼があったとき、下記の処理を行う。
   * 新規に作成予定の Scriptlet を用いた環境がコールスタックに存在する場合かをチェックしその真偽で下記の処理を行う。
     * 真だったならば、即時にすべてのコールスタックを pop する。
     * 偽だったならば、実行依頼のあったメッセージとともに 3 に戻る。
@@ -130,31 +130,31 @@ Engine の起動契機をブロックチェーンに記録するため、Counter
 ## 定義
 
 プログラムの静的表現である Scriptlet の実行に必要な環境を表すオブジェクトである。
-Environment と Parser は 1-1 の関係にある。
+Environment と Scanner は 1-1 の関係にある。
 一つの Engine に対して、複数の Environment が存在しうるが、それらが並行に実行されることはない。
-Environment は揮発性のオブジェクトであり、Parser の実行が終了し finalize が行われたあとは消滅する。
+Environment は揮発性のオブジェクトであり、Scanner の実行が終了し finalize が行われたあとは消滅する。
 
 ## ライフサイクル
 
-0. Parser が用いるデータスタックと実行スタックを構築する。
+0. Scanner が用いるデータスタックと実行スタックを構築する。
 0. アセットが保持している Scriptlet をデシリアライズし、実行スタック上にコピーする。
 0. イベント発火の契機となるメッセージに含まれるデータを、データスタック上にコピーする。
-0. Parser から完了メッセージが来るまで待機する。
-0. Parser の状態(受理/未受理)およびデータスタックの内容を Engine に引き渡す。
+0. Scanner から完了メッセージが来るまで待機する。
+0. Scanner の状態(受理/未受理)およびデータスタックの内容を Engine に引き渡す。
 
-Engine により Environment が破棄される際に、保持している Parser を破棄する。
+Engine により Environment が破棄される際に、保持している Scanner を破棄する。
 
 
-# Parser
+# Scanner
 
 ## 定義
 
-Parser は、実行スタックを解釈する。また解釈したオペレータを経由して、データスタックや Key-Value ストアの更新を行う。
+Scanner は、実行スタックを解釈する。また解釈したオペレータを経由して、データスタックや Key-Value ストアの更新を行う。
 言語処理系の一種と捉えられる。
 
 ## ライフサイクル
 
-Parser は、 Environment により生成され、下記の通りのライフサイクルとなる。
+Scanner は、 Environment により生成され、下記の通りのライフサイクルとなる。
 
 0. 実行スタックからオペレータを pop する。
 0. オペレータの処理により下記のいずれかが発生する
@@ -205,7 +205,7 @@ EOP_SEND_EXECUTE : obj1:any obj2:any ... objn:any n:int asset_name:string => {{r
 ```
 
 EOP_SEND_EXECUTE オペレータは、Engine に対し、Counterparty が send_execute メッセージを受信したときと同じように作用する。
-結果として、指定した `asset_name` に相当する scriptlet の実行が開始され、メッセージ送信元の Parser の実行は遅延される。
+結果として、指定した `asset_name` に相当する Scriptlet を解釈する Scanner の実行が開始され、開始された Scanner の実行が完了するまで、メッセージ送信元の Scanner の実行は遅延される。
 
 また、Engine は、スタック最上位にある scriptlet の実行が終了した時、未受理のフラグが立っていなければ、データスタックの内容を新たにスタック最上位になる Environment のデータスタックに push する。
 
