@@ -265,7 +265,9 @@ EOP_ASSET_BASENAME: {string} => {string}
 
 アセット名を用いて、特定のベースアセット名を持つサブアセットの scriptlet からの send だけ実行可能にするためには、下記のようにすればよい。
 
+```
 0 EOP_ASSET_NAME EOP_ASSET_BASENAME 1 EOP_ASSET_NAME EOP_ASSET_BASENAME OP_EQUAL OP_VERNOTIF {{処理の本体}}
+```
 
 このように保護されたサブアセットらに束縛された Scriptlet 群は、共通のベースアセット名を持つオブジェクトの private メソッドと見立てて活用できる。
 
