@@ -159,18 +159,24 @@ Scriptlet の文法、オペレータの作用、ならびにオペコードは�
 
 限られた例外は、以下のとおりである。
 
-* OP_INVALID_OPCODE を、PartyScript 独自のオペレータを呼び出す OP_PARTYSCRIPT の alias とする
+* OP_INVALID_OPCODE を、PartyScript 独自のオペレータを呼び出す OP_PARTYSCRIPT に置き換える。
 
 ### PartyScript オペレータと EOP_ prefix
 
-PartyScript では、下記の通り OP_PARTYSCRIPT が定義される。
+PartyScript では、下記の通り `OP_PARTYSCRIPT` が定義される。
 
 ```
 OP_PARTYSCRIPT: n => {result of sub-operator}
 ```
 
-全ての PartyScript オペレータは、1バイトの数値と OP_PARTY_SCRIPT の連続により表現される。
+`OP_PARTYSCRIPT` は、データスタックの top にある数値により異なる処理を行うオペレータである。
+主要な CPU の命令セット存在する「コプロセッサに処理を移譲するための命令」と同様の作用が `OP_PARTYSCRIPT` の実行で起きる。
+
+Bitcoin Script が標準で提供しているオペレータと区別する必要がある場合、`OP_PARTYSCRIPT` を用いた拡張オペレータを、
+「PartyScript オペレータ」と呼ぶ。
+
 本仕様では、可読性のため、PartyScript のオペレータのマクロ表記として EOP_ プレフィクスで表す。
+例えば `EOP_SEND_EXECUTE` は、実際の実行スタックでは、 `0 OP_PARTISCRIPT` という2要素から成る。
 
 ### execute メッセージの直接呼び出し
 
@@ -250,9 +256,40 @@ EOP_ASSET_BASENAME: {string} => {string}
 
 # Key-Value ストレージ
 
+Key-Value ストレージは、Engine のライフサイクルを超えてデータの保存ができる領域である。
+
+## PartyScript オペレータ
+
+Scriptlet の中から Key-Value ストレージにアクセス可能とするため、PartyScript オペレータが定義される。
+
+```
+EOP_KEY_VALUE_GET: {key} => {value}
+```
+
+```
+EOP_KEY_VALUE_SET: {value} {key} => {value}
+```
+
+```
+EOP_KEY_VALUE_KEYS: empty => {key1} {key2} ... {key_n}
+```
+
+```
+EOP_KEY_VALUE_DELETE: {key} => {value}
+```
+
+```
+EOP_KEY_VALUE_DELETEALL: empty => empty
+```
+
+## Key-Value ストレージの利用コスト
+
+Scriptlet からの Key-Value ストレージへのアクセスは、`EOP_KEY_VALUE_DELETE` および `EOP_KEY_VALUE_DELETEALL` を除き、燃料として XMP を消費する。
+コストは未決定だが、Asset が保持している Key-Value の組の数に対して指数的に増加するよう設計される。たとえば、Key-Value の組の数を n としたとき `4^(n * 2) / 100` など。
+
 ## Key-Value ストレージへのアクセス
 
-Script の実行結果を確認するため、Counterblock API にメソッドが追加される。
+Script の実行結果を確認するため、Counterblock API にメソッドが追加される。API 経由での Key-Value ストレージの取得には利用コストがかからない。(理由: コスト徴収の手段がない)
 
 ここで、Counterblock API には読み取り機能しか実現されず、Key-Value ストレージへの書き込みは Scriptlet のみが行えることに注意が必要である。
 (理由: API から書き込めてしまうと状態の再現性が得られない。)
@@ -262,4 +299,4 @@ API 経由で Key-Value ストレージの内容を変更したい場合には�
 ## 更新のタイムラグ
 
 Key-Value ストレージの更新は、スクリプト起動依頼イベントの発火が必要である。そして、スクリプト起動依頼イベントは、対応する execute メッセージを含むトランザクションが counterblock により処理されないと、発火されない。
-このような時差が発生するため、Key-Value ストレージの値を取得する前には、取得時点での block height を考慮する余地がある。
+このような時差が発生するため、アプリケーションプログラムが Key-Value ストレージの値を取得する前には、取得時点での block height を考慮する余地がある。
