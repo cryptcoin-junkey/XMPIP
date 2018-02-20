@@ -1,0 +1,42 @@
+@startuml
+title PartyScript Lifecycle (Environment)
+
+skinparam state {
+  BackgroundColor<<Object>> Olive
+}
+
+[*] --> Engine
+state Engine <<Object>> {
+
+  note "There have some\n omitted states in Engine." as N1
+
+  GeneratingEnvironment --> Environment
+
+  state Environment <<Object>> {
+    state Scanner <<Object>> {
+    }
+
+    DeserializingScriptlet : gets the scriptlet from Asset\n and copies to the exec stack
+    DeserializingScriptlet --> Scanner : scan
+    
+    BuildingStacks : creats the data stack\n and the exec stack 
+    BuildingStacks --> DeserializingScriptlet
+
+    [*] --> BuildingStacks
+    Scanner -->[*]
+  }
+
+  Scanner --> CheckingLoopCall : execute (recursive call)
+  FinalizingEnvironment --> Scanner : resume
+  CheckingLoopCall -left-> GeneratingEnvironment
+
+  CheckingEnvStack --> FinalizingEnvironment
+  CheckingResult --> CheckingEnvStack
+  Environment --> CheckingResult
+
+  [*] --> GeneratingEnvironment
+}
+
+Engine --> [*]
+
+@enduml
