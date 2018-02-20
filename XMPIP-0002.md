@@ -231,7 +231,7 @@ EOP_ASSET_OWNER: empty => {Address}
 EOP_ROOT_OWNER EOP_TOKEN_OWNER OP_EQUAL OP_VERNOTIF  {{処理本体}}
 ```
 
-## コールツリーにあるアセット名の取得
+## 環境スタックにあるアセット名の取得
 
 ```
 EOP_ASSET_NAME: {number} => {String}
@@ -241,7 +241,7 @@ EOP_ASSET_NAME: {number} => {String}
 EOP_ASSET_BASENAME: {string} => {string}
 ```
 
-`EOP_ASSET_NAME` は、実行中の scriptlet を 0 として、コールスタックを n 回遡った実行環境の scriptlet を束縛している、アセット名を返す。
+`EOP_ASSET_NAME` は、環境スタックの top を 0 として、n 個分 bottom 側にある環境が実行中の scriptlet を束縛している、アセット名を返す。
 
 `EOP_ASSET_BASENAME` は、データスタックの top にある文字列がサブアセット名だった時、その文字列を pop してベースアセット名を data stack に push する。data stack の top がサブアセットでなかった場合、何もしない。
 
