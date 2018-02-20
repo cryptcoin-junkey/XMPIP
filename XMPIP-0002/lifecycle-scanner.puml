@@ -1,0 +1,62 @@
+@startuml
+title PartyScript Lifecycle (Scanner)
+
+skinparam state {
+  BackgroundColor<<Object>> Olive
+}
+
+[*] --> Engine
+state Engine <<Object>> {
+
+  note "There have some\n omitted states in Engine." as N1
+
+  GeneratingEnvironment --> Environment
+
+  FinalizingEnvironment --> Scanner : resume
+  CheckingLoopCall -left-> GeneratingEnvironment
+
+  CheckingEnvStack --> FinalizingEnvironment
+  CheckingResult --> CheckingEnvStack
+  Environment --> CheckingResult
+
+  state Environment <<Object>> {
+    note "There have some\n omitted states in Environment." as N2
+    state Scanner <<Object>> {
+
+      SettingRejectionFlag : Means error exit.
+      SettingRejectionFlag --> [*]
+
+      CheckingDataStack : Checks if the result is accepted
+      CheckingDataStack --> [*]
+
+      CheckingExecStack : Checks if the exec stack\n does not empty.
+      CheckingExecStack --> PoppingExecStack
+      CheckingExecStack --> CheckingDataStack
+
+      OperatingKeyValueStore --> SettingRejectionFlag
+      OperatingKeyValueStore --> CheckingExecStack
+
+      OperatingDataStack --> OperatingKeyValueStore
+      OperatingDataStack --> CheckingLoopCall : execute (recursive call)
+      OperatingDataStack --> CheckingExecStack
+      OperatingDataStack --> SettingRejectionFlag
+      
+      PoppingExecStack : Pops data from the exec stack\n and execute if the atom is an operator.
+      PoppingExecStack --> OperatingDataStack
+      PoppingExecStack --> SettingRejectionFlag
+      PoppingExecStack --> CheckingExecStack
+      
+      [*] --> PoppingExecStack
+    }
+
+    [*] --> Scanner
+    Scanner -->[*]
+  }
+
+
+  [*] --> GeneratingEnvironment
+}
+
+Engine --> [*]
+
+@enduml
