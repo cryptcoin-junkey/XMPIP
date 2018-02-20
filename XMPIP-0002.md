@@ -117,20 +117,15 @@ Engine の起動契機をブロックチェーンに記録するため、Counter
 
 ## 定義
 
-プログラムの静的表現である Scriptlet の実行に必要な環境を表すオブジェクトである。
+Environment は、プログラムの静的表現である Scriptlet の実行に際し、必要な環境を表すオブジェクトである。
 Environment と Scanner は 1-1 の関係にある。
 一つの Engine に対して、複数の Environment が存在しうるが、それらが並行に実行されることはない。
-Environment は揮発性のオブジェクトであり、Scanner の実行が終了し finalize が行われたあとは消滅する。
 
 ## ライフサイクル
 
-0. Scanner が用いるデータスタックと実行スタックを構築する。
-0. アセットが保持している Scriptlet をデシリアライズし、実行スタック上にコピーする。
-0. イベント発火の契機となるメッセージに含まれるデータを、データスタック上にコピーする。
-0. Scanner から完了メッセージが来るまで待機する。
-0. Scanner の状態(受理/未受理)およびデータスタックの内容を Engine に引き渡す。
+![Environmentのライフサイクル](XMPIP-0002/lifecycle-environment.svg)
 
-Engine により Environment が破棄される際に、保持している Scanner を破棄する。
+Environment は、Engine により自らが破棄される際に、保持している Scanner を破棄する。
 
 
 # Scanner
